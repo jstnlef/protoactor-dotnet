@@ -1,0 +1,15 @@
+syntax = "proto3";
+package messages;
+option csharp_namespace = "echo.messages";
+
+message ClientConnected
+{
+  string address=1;
+  string id=2;
+}
+
+message Acknowledge {}
+
+message Message {
+  string body = 1;
+}
