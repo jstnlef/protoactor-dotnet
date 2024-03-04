@@ -268,7 +268,7 @@ public abstract class ClusterTests : ClusterTestBase
 
             var ingressNodes = new[] { Members[0], Members[1] };
             var victim = Members[2];
-            var ids = Enumerable.Range(1, 3).Select(id => id.ToString()).ToList();
+            var ids = Enumerable.Range(0, 8000).Select(id => id.ToString()).ToList();
 
             var cts = new CancellationTokenSource();
 
@@ -281,24 +281,26 @@ public abstract class ClusterTests : ClusterTestBase
                 }
             );
 
-            await Task.Delay(1000);
+            await Task.Delay(2000);
             _testOutputHelper.WriteLine("Terminating node");
             await ClusterFixture.RemoveNode(victim);
             _testOutputHelper.WriteLine("Spawning node");
             await ClusterFixture.SpawnMember();
-            await Task.Delay(1000);
+            await Task.Delay(2000);
             cts.Cancel();
             await worker;
         }, _testOutputHelper);
     }
 
-    private async Task CanGetResponseFromAllIdsOnAllNodes(IEnumerable<string> actorIds, IList<Cluster> nodes,
+    private async Task CanGetResponseFromAllIdsOnAllNodes(
+        IEnumerable<string> actorIds,
+        ICollection<Cluster> nodes,
         int timeoutMs)
     {
         var timer = Stopwatch.StartNew();
         var timeout = new CancellationTokenSource(timeoutMs).Token;
         await Task.WhenAll(nodes.SelectMany(entryNode => actorIds.Select(id => PingPong(entryNode, id, timeout))));
-        _testOutputHelper.WriteLine("Got response from {0} nodes in {1}", nodes.Count(), timer.Elapsed);
+        _testOutputHelper.WriteLine("Got response from {0} nodes in {1}", nodes.Count, timer.Elapsed);
     }
 
     /// <summary>
@@ -554,14 +556,7 @@ public abstract class ClusterTests : ClusterTestBase
 
         do
         {
-            try
-            {
-                response = await cluster.Ping(id, id, CancellationTokens.FromSeconds(4), kind, context);
-            }
-            catch (TimeoutException)
-            {
-                // expected
-            }
+            response = await cluster.Ping(id, id, CancellationTokens.FromSeconds(4), kind, context);
 
             if (response == null)
             {
