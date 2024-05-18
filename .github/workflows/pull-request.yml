@@ -23,15 +23,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-dotnet@v2
         with:
-          dotnet-version: "7.0.x"
-          include-prerelease: true
-      - uses: actions/setup-dotnet@v2
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: |
+            8.0.x
+            7.0.x
             6.0.x
-            3.1.x
+          include-prerelease: true
 
       - name: Build
         run: dotnet build ProtoActor.sln -c Release
@@ -49,6 +49,7 @@ jobs:
     strategy:
       matrix:
         dotnet:
+          - net8.0
           - net7.0
           - net6.0
         test:
@@ -59,15 +60,15 @@ jobs:
     
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-dotnet@v2
         with:
-          dotnet-version: "7.0.x"
-          include-prerelease: true
-      - uses: actions/setup-dotnet@v2
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: |
+            8.0.x
+            7.0.x
             6.0.x
-            3.1.x
+          include-prerelease: true
 
       - name: Run tests ${{ matrix.test }}
         timeout-minutes: 15
@@ -90,15 +91,15 @@ jobs:
     
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-dotnet@v2
         with:
-          dotnet-version: "7.0.x"
-          include-prerelease: true
-      - uses: actions/setup-dotnet@v2
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v3
         with:
           dotnet-version: |
+            8.0.x
+            7.0.x
             6.0.x
-            3.1.x
+          include-prerelease: true
       - name: Run tests ${{ matrix.test }}
         timeout-minutes: 15
         run: |
