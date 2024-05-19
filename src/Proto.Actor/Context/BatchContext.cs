@@ -56,6 +56,8 @@ public sealed class BatchContext : ISenderContext, IDisposable
                 }
 
                 throw new DeadLetterException(target);
+            case AddressIsUnreachable m:
+                throw new AddressIsUnreachableException(m.Address);
             case null:
             case T:
                 return (T)result!;

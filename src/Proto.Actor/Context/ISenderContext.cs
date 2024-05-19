@@ -197,6 +197,8 @@ public static class SenderContextExtensions
                 }
 
                 throw new DeadLetterException(target);
+            case AddressIsUnreachable m:
+                throw new AddressIsUnreachableException(m.Address);
             case null:
             case T:
                 return (T)messageResult!;

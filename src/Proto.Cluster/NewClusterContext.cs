@@ -77,15 +77,24 @@ public class NewClusterContext : IClusterContext
                 {
                     return await context.RequestAsync<T>(pid, message, cancelToken).ConfigureAwait(false);
                 }
+                catch (AddressIsUnreachableException)
+                {
+                    // Address is unreachable. Let's clear the PID cache and allow the request to try again.
+                    if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+                    {
+                        Logger.LogDebug("RequestAsync failed, {Address} is unreachable from {Source}", pid.Address, source);
+                    }
+                    _pidCache.RemoveByVal(clusterIdentity, pid);
+                }
                 catch (DeadLetterException)
                 {
-                    // Dead PID. We want to try and get a new PID and attempt the request again
+                    // Dead PID. We want to try and get a new PID and attempt the request again. That said, given the
+                    // nature of how the actor creation occurs, I'm not entirely sure that we will ever hit this.
                     if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
                     {
                         Logger.LogDebug("RequestAsync failed, dead PID from {Source}", source);
                     }
-
-                    await RemoveFromSource(clusterIdentity, PidSource.Cache, pid).ConfigureAwait(false);
+                    _pidCache.RemoveByVal(clusterIdentity, pid);
                 }
                 catch (InvalidOperationException e)
                 {
@@ -224,16 +233,6 @@ public class NewClusterContext : IClusterContext
 
             return default;
         }
-    }
-
-    private async ValueTask RemoveFromSource(ClusterIdentity clusterIdentity, PidSource source, PID pid)
-    {
-        if (source == PidSource.Lookup)
-        {
-            await _identityLookup.RemovePidAsync(clusterIdentity, pid, CancellationToken.None).ConfigureAwait(false);
-        }
-
-        _pidCache.RemoveByVal(clusterIdentity, pid);
     }
 
     private struct GetPidResult
