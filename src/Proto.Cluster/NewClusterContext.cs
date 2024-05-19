@@ -57,7 +57,7 @@ public class NewClusterContext : IClusterContext
             }
         }
 
-        var cancelTokenSource = CancellationTokenSource.CreateLinkedTokenSource(ct, context.System.Shutdown);
+        using var cancelTokenSource = CancellationTokenSource.CreateLinkedTokenSource(ct, context.System.Shutdown);
         var cancelToken = cancelTokenSource.Token;
         Stopwatch stopwatch = null!;
         if (context.System.Metrics.Enabled)
