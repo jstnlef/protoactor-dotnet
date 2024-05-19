@@ -95,16 +95,10 @@ public class NewClusterContext : IClusterContext
             }
             catch (TaskCanceledException)
             {
-                if (!context.System.Shutdown.IsCancellationRequested)
+                if (!context.System.Shutdown.IsCancellationRequested && _logger.IsEnabled(LogLevel.Debug))
                 {
-                    if (_logger.IsEnabled(LogLevel.Debug))
-                    {
-                        _logger.LogDebug("RequestAsync timed out, PID from {Source}", source);
-                    }
+                    _logger.LogDebug("RequestAsync timed out, PID from {Source}", source);
                 }
-
-                // Do we want to do this? I actually don't think we necessarily need to
-                await RemoveFromSource(clusterIdentity, PidSource.Cache, pid).ConfigureAwait(false);
             }
             catch (Exception x)
             {
