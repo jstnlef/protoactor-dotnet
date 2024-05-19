@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Proto.Cluster.Identity;
 using Proto.Cluster.Metrics;
 using Proto.Extensions;
@@ -61,75 +60,73 @@ public class NewClusterContext : IClusterContext
         var cancelTokenSource = CancellationTokenSource.CreateLinkedTokenSource(ct, context.System.Shutdown);
         var cancelToken = cancelTokenSource.Token;
         Stopwatch stopwatch = null!;
+        if (context.System.Metrics.Enabled)
+        {
+            stopwatch = Stopwatch.StartNew();
+        }
 
-        while (!cancelToken.IsCancellationRequested)
+        try
+        {
+            while (!cancelToken.IsCancellationRequested)
+            {
+                var pidResult = await GetPidAsync(clusterIdentity, context, cancelToken).ConfigureAwait(false);
+                var pid = pidResult.Pid;
+                var source = pidResult.Source;
+
+                try
+                {
+                    return await context.RequestAsync<T>(pid, message, cancelToken).ConfigureAwait(false);
+                }
+                catch (DeadLetterException)
+                {
+                    // Dead PID. We want to try and get a new PID and attempt the request again
+                    if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+                    {
+                        Logger.LogDebug("RequestAsync failed, dead PID from {Source}", source);
+                    }
+
+                    await RemoveFromSource(clusterIdentity, PidSource.Cache, pid).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException e)
+                {
+                    // We got an unexpected message. Timeout the request by breaking early
+                    Logger.LogError(e, "Unexpected message");
+                    break;
+                }
+                catch (TaskCanceledException)
+                {
+                    // The task has been canceled so might as well break early
+                    if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+                    {
+                        Logger.LogDebug("RequestAsync timed out, PID from {Source}", source);
+                    }
+                    break;
+                }
+                catch (Exception x)
+                {
+                    x.CheckFailFast();
+
+                    if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+                    {
+                        Logger.LogDebug(x, "RequestAsync failed with exception, PID from {Source}", source);
+                    }
+                    break;
+                }
+            }
+        }
+        finally
         {
             if (context.System.Metrics.Enabled)
             {
-                stopwatch = Stopwatch.StartNew();
-            }
+                var elapsed = stopwatch.Elapsed;
 
-            var pidResult = await GetPidAsync(clusterIdentity, context, cancelToken).ConfigureAwait(false);
-            var pid = pidResult.Pid;
-            var source = pidResult.Source;
-
-            try
-            {
-                return await context.RequestAsync<T>(pid, message, cancelToken).ConfigureAwait(false);
-            }
-            catch (DeadLetterException)
-            {
-                // Dead PID. We want to try and get a new PID and attempt the request again.
-                if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
-                {
-                    Logger.LogDebug("RequestAsync failed, dead PID from {Source}", source);
-                }
-
-                await RemoveFromSource(clusterIdentity, PidSource.Cache, pid).ConfigureAwait(false);
-            }
-            catch (InvalidOperationException e)
-            {
-                // We got an unexpected message. Timeout the request by breaking early.
-                Logger.LogError(e, "Unexpected message");
-                break;
-            }
-            catch (TaskCanceledException)
-            {
-                if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
-                {
-                    Logger.LogDebug("RequestAsync timed out, PID from {Source}", source);
-                }
-
-                break;
-            }
-            catch (Exception x)
-            {
-                x.CheckFailFast();
-
-                if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
-                {
-                    Logger.LogDebug(x, "RequestAsync failed with exception, PID from {Source}", source);
-                }
-
-                await RemoveFromSource(clusterIdentity, PidSource.Cache, pid).ConfigureAwait(false);
-                break;
-            }
-            finally
-            {
-                if (context.System.Metrics.Enabled)
-                {
-                    var elapsed = stopwatch.Elapsed;
-
-                    ClusterMetrics.ClusterRequestDuration
-                        .Record(elapsed.TotalSeconds,
-                            new KeyValuePair<string, object?>("id", _system.Id),
-                            new KeyValuePair<string, object?>("address", _system.Address),
-                            new KeyValuePair<string, object?>("clusterkind", clusterIdentity.Kind),
-                            new KeyValuePair<string, object?>("messagetype", message.GetMessageTypeName()),
-                            new KeyValuePair<string, object?>("pidsource",
-                                pidResult.Source == PidSource.Cache ? "PidCache" : "IIdentityLookup")
-                        );
-                }
+                ClusterMetrics.ClusterRequestDuration
+                    .Record(elapsed.TotalSeconds,
+                        new KeyValuePair<string, object?>("id", _system.Id),
+                        new KeyValuePair<string, object?>("address", _system.Address),
+                        new KeyValuePair<string, object?>("clusterkind", clusterIdentity.Kind),
+                        new KeyValuePair<string, object?>("messagetype", message.GetMessageTypeName())
+                    );
             }
         }
 
