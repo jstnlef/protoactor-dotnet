@@ -67,6 +67,7 @@ public class NewClusterContext : IClusterContext
 
         try
         {
+            var retry = 0;
             while (!cancelToken.IsCancellationRequested)
             {
                 var pidResult = await GetPidAsync(clusterIdentity, context, cancelToken).ConfigureAwait(false);
@@ -82,7 +83,7 @@ public class NewClusterContext : IClusterContext
                     // Address is unreachable. Let's clear the PID cache and allow the request to try again.
                     if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
                     {
-                        Logger.LogDebug("RequestAsync failed, {Address} is unreachable from {Source}", pid.Address, source);
+                        Logger.LogDebug("RequestAsync failed, {Address} is unreachable. PID from {Source}", pid.Address, source);
                     }
                     _pidCache.RemoveByVal(clusterIdentity, pid);
                 }
@@ -96,32 +97,30 @@ public class NewClusterContext : IClusterContext
                     }
                     _pidCache.RemoveByVal(clusterIdentity, pid);
                 }
-                catch (InvalidOperationException e)
-                {
-                    // We got an unexpected message. Timeout the request by breaking early
-                    Logger.LogError(e, "Unexpected message");
-                    break;
-                }
-                catch (TaskCanceledException)
-                {
-                    // The task has been canceled so might as well break early
-                    if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
-                    {
-                        Logger.LogDebug("RequestAsync timed out, PID from {Source}", source);
-                    }
-                    break;
-                }
-                catch (Exception x)
-                {
-                    x.CheckFailFast();
-
-                    if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
-                    {
-                        Logger.LogDebug(x, "RequestAsync failed with exception, PID from {Source}", source);
-                    }
-                    break;
-                }
+                retry++;
+                await Task.Delay(retry * 20, cancelToken).ConfigureAwait(false);
             }
+        }
+        catch (TaskCanceledException)
+        {
+            if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+            {
+                Logger.LogDebug("RequestAsync timed out");
+            }
+        }
+        catch (InvalidOperationException e)
+        {
+            Logger.LogError(e, "RequestAsync received an unexpected message");
+        }
+        catch (Exception x)
+        {
+            x.CheckFailFast();
+
+            if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+            {
+                Logger.LogDebug(x, "RequestAsync failed with exception");
+            }
+            throw;
         }
         finally
         {
