@@ -48,6 +48,11 @@ public class NewClusterContext : IClusterContext
         ISenderContext context,
         CancellationToken ct)
     {
+        if (_cluster.MemberList.Stopping)
+        {
+            throw new InvalidOperationException("Cluster is shutting down");
+        }
+
         //for member requests, we need to wait for the cluster to be ready
         if (!_cluster.MemberList.IsClient)
         {
@@ -67,7 +72,6 @@ public class NewClusterContext : IClusterContext
 
         try
         {
-            var retry = 0;
             while (!cancelToken.IsCancellationRequested)
             {
                 var pidResult = await GetPidAsync(clusterIdentity, context, cancelToken).ConfigureAwait(false);
@@ -83,43 +87,38 @@ public class NewClusterContext : IClusterContext
                     // Address is unreachable. Let's clear the PID cache and allow the request to try again.
                     if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
                     {
-                        Logger.LogDebug("RequestAsync failed, {Address} is unreachable. PID from {Source}", pid.Address, source);
+                        Logger.LogDebug("RequestAsync to {ClusterIdentity} failed, {Address} is unreachable. PID from {Source}", clusterIdentity, pid.Address, source);
                     }
-                    _pidCache.RemoveByVal(clusterIdentity, pid);
+                    await HandleDeadPid(clusterIdentity, pid);
                 }
                 catch (DeadLetterException)
                 {
-                    // Dead PID. We want to try and get a new PID and attempt the request again. That said, given the
-                    // nature of how the actor creation occurs, I'm not entirely sure that we will ever hit this.
+                    // Dead PID. We want to try and get a new PID and attempt the request again
                     if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
                     {
-                        Logger.LogDebug("RequestAsync failed, dead PID from {Source}", source);
+                        Logger.LogDebug(
+                            "RequestAsync to {ClusterIdentity} failed. Dead PID from {Source}. Retrying",
+                            clusterIdentity,
+                            source);
                     }
-                    _pidCache.RemoveByVal(clusterIdentity, pid);
+
+                    await HandleDeadPid(clusterIdentity, pid);
                 }
-                retry++;
-                await Task.Delay(retry * 20, cancelToken).ConfigureAwait(false);
             }
         }
         catch (TaskCanceledException)
         {
-            if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
-            {
-                Logger.LogDebug("RequestAsync timed out");
-            }
-        }
-        catch (InvalidOperationException e)
-        {
-            Logger.LogError(e, "RequestAsync received an unexpected message");
+            // Ignored. This will fall through to throw the default TimeoutException.
         }
         catch (Exception x)
         {
             x.CheckFailFast();
 
-            if (Logger.IsEnabled(LogLevel.Debug) && _requestLogThrottle().IsOpen())
+            if (_requestLogThrottle().IsOpen())
             {
-                Logger.LogDebug(x, "RequestAsync failed with exception");
+                Logger.LogError(x, "RequestAsync to {ClusterIdentity} failed with exception", clusterIdentity);
             }
+
             throw;
         }
         finally
@@ -140,10 +139,10 @@ public class NewClusterContext : IClusterContext
 
         if (_requestLogThrottle().IsOpen())
         {
-            Logger.LogWarning("RequestAsync failed for {ClusterIdentity}", clusterIdentity);
+            Logger.LogWarning("RequestAsync to {ClusterIdentity} timed out", clusterIdentity);
         }
 
-        throw new TimeoutException("Request timed out");
+        throw new TimeoutException($"RequestAsync to {clusterIdentity} timed out");
     }
 
     private async ValueTask<GetPidResult> GetPidAsync(
@@ -159,8 +158,9 @@ public class NewClusterContext : IClusterContext
             return new GetPidResult(pid, source);
         }
 
-        var retry = 0;
         source = PidSource.Lookup;
+
+        var retry = 0;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -188,7 +188,7 @@ public class NewClusterContext : IClusterContext
             }
         }
 
-        throw new TimeoutException("Request timed out fetching PID");
+        throw new TimeoutException($"RequestAsync to {clusterIdentity} timed out while fetching PID");
     }
 
     private async ValueTask<PID?> GetPidFromLookup(
@@ -232,6 +232,12 @@ public class NewClusterContext : IClusterContext
 
             return default;
         }
+    }
+
+    private async ValueTask HandleDeadPid(ClusterIdentity clusterIdentity, PID pid)
+    {
+        await _identityLookup.RemovePidAsync(clusterIdentity, pid, CancellationToken.None).ConfigureAwait(false);
+        _pidCache.RemoveByVal(clusterIdentity, pid);
     }
 
     private struct GetPidResult
