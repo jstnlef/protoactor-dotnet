@@ -65,6 +65,7 @@ public sealed class SharedFutureProcess : Process, IDisposable
         }
 
         _maxRequestId = int.MaxValue - int.MaxValue % size;
+        System.EventStream.Subscribe<AddressIsUnreachableEvent>(e => HandleAddressIsUnreachable(e.Address));
     }
 
     private PID Pid { get; }
@@ -207,6 +208,11 @@ public sealed class SharedFutureProcess : Process, IDisposable
         slot = _slots[GetIndex(requestId)];
 
         return slot.RequestId == requestId;
+    }
+
+    private void HandleAddressIsUnreachable(string address)
+    {
+        Console.WriteLine("here");
     }
 
     private static uint ToRequestId(int index) => (uint)(index + 1);

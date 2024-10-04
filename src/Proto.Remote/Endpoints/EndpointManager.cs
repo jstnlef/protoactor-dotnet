@@ -132,6 +132,11 @@ public sealed class EndpointManager : IDiagnosticsProvider
             }
         }
 
+        if (evt.Address is not null)
+        {
+            _system.EventStream.Publish(new AddressIsUnreachableEvent(evt.Address));
+        }
+
         Logger.LogDebug("[{SystemAddress}] Endpoint {Address} terminated", _system.Address,
             evt.Address ?? evt.ActorSystemId);
     }

@@ -3,10 +3,7 @@ using System;
 // ReSharper disable once CheckNamespace
 namespace Proto;
 
-public class AddressIsUnreachableEvent
-{
-
-}
+public sealed record AddressIsUnreachableEvent(string Address);
 
 #pragma warning disable RCS1194
 public class AddressIsUnreachableException : Exception

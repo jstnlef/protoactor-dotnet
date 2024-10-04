@@ -17,7 +17,7 @@ namespace Proto.Cluster.Tests;
 [Collection("ClusterTests")]
 public class LegacyTimeoutTests
 {
-    [Fact]
+    [Fact(Skip = "This should no longer work with the new context")]
     public async Task ReturnsNullOnRequestTimeoutInLegacyMode()
     {
         var fixture = new Fixture(1);

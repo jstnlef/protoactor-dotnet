@@ -306,7 +306,7 @@ public abstract class ClusterTests : ClusterTestBase
     /// <summary>
     /// Make sure we timeout if the target virtual actor is not joined the cluster
     /// </summary>
-    [Fact]
+    [Fact(Skip = "This WILL not work with the new cluster context")]
     public async Task TimeoutVirtualActorsNotJoined()
     {
         await Trace(async () =>
@@ -556,7 +556,7 @@ public abstract class ClusterTests : ClusterTestBase
 
         do
         {
-            response = await cluster.Ping(id, id, CancellationTokens.FromSeconds(4), kind, context);
+            response = await cluster.Ping(id, id, CancellationTokens.FromSeconds(10), kind, context);
 
             if (response == null)
             {

@@ -166,7 +166,7 @@ public record ClusterConfig
     ///     <see cref="DefaultClusterContext" />
     /// </summary>
     [JsonIgnore]
-    public Func<Cluster, IClusterContext> ClusterContextProducer { get; init; } = c => new DefaultClusterContext(c);
+    public Func<Cluster, IClusterContext> ClusterContextProducer { get; init; } = c => new NewClusterContext(c);
 
     /// <summary>
     ///     Configuration for the PubSub extension.

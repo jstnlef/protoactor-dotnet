@@ -60,7 +60,7 @@ public class OpenTelemetryMetricsTests : IAsyncLifetime
         var address = _cluster.System.Address;
 
         ShouldReportMetric("protocluster_virtualactor_requestasync_duration", "address", address, "clusterkind",
-            EchoActor.Kind, "id", id, "messagetype", "Ping", "pidsource", "IIdentityLookup");
+            EchoActor.Kind, "id", id, "messagetype", "Ping");
 
         ShouldReportMetric("protocluster_resolve_pid_duration", "address", address, "clusterkind", EchoActor.Kind, "id",
             id);
